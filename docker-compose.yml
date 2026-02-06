@@ -1,0 +1,144 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: dev-mysql
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_ROOT_HOST: "%"
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init/mysql:/docker-entrypoint-initdb.d:ro # <— tambahkan ini
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -uroot --silent" ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest # <— pakai repo resmi
+    container_name: dev-phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 128M
+    depends_on:
+      - mysql
+    ports:
+      - "127.0.0.1:8081:80"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: dev-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: dev
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d dev" ]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  pgweb:
+    image: sosedoff/pgweb
+    container_name: dev-pgweb
+    restart: always
+    ports:
+      - "8082:8081" # Saya taruh di 8082 agar tidak bentrok dengan phpmyadmin (8081)
+    environment:
+      # Auto-connect string! Tidak perlu input password lagi di browser
+      - DATABASE_URL=postgres://postgres@postgres:5432/dev?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: dev-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    command: [ "redis-server", "--appendonly", "yes" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: dev-redis-insight
+    ports:
+      - "5540:5540"
+    volumes:
+      - redis_insight_data:/data
+    depends_on:
+      - redis
+
+  minio:
+    image: minio/minio:latest
+    container_name: dev-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "127.0.0.1:9000:9000" # S3 API
+      - "127.0.0.1:9001:9001" # MinIO Console (Web UI)
+    volumes:
+      - minio_dev_data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  unleash-postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: unleash
+      POSTGRES_USER: unleash_user
+      POSTGRES_PASSWORD: password123
+    volumes:
+      - postgres_unleash_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "--username=unleash_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Unleash Server
+  unleash:
+    image: unleashorg/unleash-server:latest
+    ports:
+      - "4242:4242"
+    environment:
+      # Koneksi ke Database
+      DATABASE_HOST: unleash-postgres
+      DATABASE_NAME: unleash
+      DATABASE_USERNAME: unleash_user
+      DATABASE_PASSWORD: password123
+      DATABASE_SSL: "false"
+      
+      # Matikan demo authentication agar langsung login sebagai Admin
+      # (Hanya untuk development lokal!)
+      AUTH_TYPE: "demo" 
+    depends_on:
+      unleash-postgres:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  postgres_dev_data:
+  redis_dev_data:
+  minio_dev_data:
+  postgres_unleash_dev_data:
+  redis_insight_data:
+
