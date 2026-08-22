@@ -49,14 +49,23 @@ services:
     image: sosedoff/pgweb
     container_name: dev-pgweb
     restart: always
+    # Retry kalau DB target belum siap / sedang mati. Tanpa ini pgweb langsung
+    # exit dan `restart: always` bikin container crash-loop tiap 3 detik.
+    # Argumen ini DITAMBAHKAN ke entrypoint image:
+    #   /usr/bin/pgweb --bind=0.0.0.0 --listen=8081 <argumen di bawah>
+    command: [ "--open-retry=100", "--open-retry-delay=3" ]
     ports:
       - "8082:8081" # Saya taruh di 8082 agar tidak bentrok dengan phpmyadmin (8081)
     environment:
-      # Auto-connect string! Tidak perlu input password lagi di browser
-      - DATABASE_URL=postgres://postgres@postgres:5432/dev?sslmode=disable
-    depends_on:
-      postgres:
-        condition: service_healthy
+      # Auto-connect string — tidak perlu input password lagi di browser.
+      # Kredensial ada di ./.env (tidak ikut ter-commit), lihat .env.example.
+      - PGWEB_DATABASE_URL=${PGWEB_DATABASE_URL}
+    # depends_on sengaja dilepas: target DB saat ini di LUAR compose ini
+    # (host.docker.internal). Kalau balik menunjuk service `postgres` di file
+    # ini, aktifkan lagi blok berikut supaya urutan start-nya benar:
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
 
   redis:
     image: redis:7-alpine
