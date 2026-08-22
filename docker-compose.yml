@@ -134,6 +134,37 @@ services:
       unleash-postgres:
         condition: service_healthy
 
+  # ── 9Router (AI coding gateway) — LOKAL, OFF by default ───────────────────
+  # ON      : docker compose up -d 9router     (hanya service ini, yg lain tidak ikut)
+  # OFF     : docker compose stop 9router
+  # ON lagi : docker compose start 9router
+  # Hapus   : docker compose rm -sf 9router     (data tetap aman di volume 9router_local_data)
+  # Dashboard: http://localhost:20128   (login: password saja, lihat .env)
+  # Secret ada di ./.env (NINEROUTER_*), tidak ikut ter-commit.
+  9router:
+    image: decolua/9router:latest
+    container_name: 9router
+    profiles: [ "9router" ]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${NINEROUTER_PORT:-20128}:20128"
+    volumes:
+      - 9router_local_data:/app/data
+    environment:
+      DATA_DIR: /app/data
+      PORT: "20128"
+      HOSTNAME: "0.0.0.0"
+      NODE_ENV: production
+      JWT_SECRET: "${NINEROUTER_JWT_SECRET}"
+      INITIAL_PASSWORD: "${NINEROUTER_INITIAL_PASSWORD}"
+      API_KEY_SECRET: "${NINEROUTER_API_KEY_SECRET}"
+      MACHINE_ID_SALT: "${NINEROUTER_MACHINE_ID_SALT}"
+      AUTH_COOKIE_SECURE: "false"
+      REQUIRE_API_KEY: "${NINEROUTER_REQUIRE_API_KEY:-true}"
+      BASE_URL: "http://localhost:${NINEROUTER_PORT:-20128}"
+      NEXT_PUBLIC_BASE_URL: "http://localhost:${NINEROUTER_PORT:-20128}"
+      CLOUD_URL: "https://9router.com"
+
 volumes:
   mysql_data:
   postgres_dev_data:
@@ -141,4 +172,6 @@ volumes:
   minio_dev_data:
   postgres_unleash_dev_data:
   redis_insight_data:
+  9router_local_data:
+    name: 9router_local_data
 
